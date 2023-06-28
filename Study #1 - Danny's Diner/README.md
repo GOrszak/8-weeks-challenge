@@ -26,8 +26,9 @@ Three key datasets for this case study
 - menu: The menu table maps the product_id to the actual product_name and price of each menu item.
 - members: The members table captures the join_date when a customer_id joined the beta version of the Danny’s Diner loyalty program.
 
-## Entity Relationship Diagram  To do dodania
-![alt text](
+## Entity Relationship Diagram
+
+![Schema](https://github.com/GOrszak/8-weeks-challenge/assets/134173513/46d5cd43-29c1-4937-8c47-fb41fe10e07a)
 
 ## Case Study Questions
 1. What is the total amount each customer spent at the restaurant?
@@ -324,22 +325,61 @@ ORDER BY points DESC;
 ```
 
 
-|customer_id|"order_date"|"product_name"|"price"|"member"|
+|customer_id|order_date|product_name|price|member|
 | --------- | --------- | ----- | ------- | --------- | 
-|A|"2021-01-01"|"sushi"|10|"N"|
-|A|"2021-01-01"|"curry"|15|"N"|
-|A|"2021-01-07"|"curry"|15|"Y"|
-|A|"2021-01-10"|"ramen"|12|"Y"|
-|A|"2021-01-11"|"ramen"|12|"Y"|
-|A|"2021-01-11"|"ramen"|12|"Y"|
-|B|"2021-01-01"|"curry"|15|"N"|
-|B|"2021-01-02"|"curry"|15|"N"|
-|B|"2021-01-04"|"sushi"|10|"N"|
-|B|"2021-01-11"|"sushi"|10|"Y"|
-|B|"2021-01-16"|"ramen"|12|"Y"|
-|B|"2021-02-01"|"ramen"|12|"Y"|
-|C|"2021-01-01"|"ramen"|12|"N"|
-|C|"2021-01-01"|"ramen"|12|"N"|
-|C|"2021-01-07"|"ramen"|12|"N"|
+|A|2021-01-01|sushi|10|N|
+|A|2021-01-01|curry|15|N|
+|A|2021-01-07|curry|15|Y|
+|A|2021-01-10|ramen|12|Y|
+|A|2021-01-11|ramen|12|Y|
+|A|2021-01-11|ramen|12|Y|
+|B|2021-01-01|curry|15|N|
+|B|2021-01-02|curry|15|N|
+|B|2021-01-04|sushi|10|N|
+|B|2021-01-11|sushi|10|Y|
+|B|2021-01-16|ramen|12|Y|
+|B|2021-02-01|ramen|12|Y|
+|C|2021-01-01|ramen|12|N|
+|C|2021-01-01|ramen|12|N|
+|C|2021-01-07|ramen|12|N|
+
+-----------------------------
+
+#### Danny also requires further information about the ranking of customer products, but he purposely does not need the ranking for non-member purchases so he expects null ranking values for the records when customers are not yet part of the loyalty program
+
+
+```sql
+SELECT  s.customer_id,
+		SUM(CASE
+ 				WHEN order_date BETWEEN join_date AND (join_date + INTERVAL '7 DAY') THEN price*10*2
+				WHEN men.product_name = 'sushi' AND (order_date > (join_date + INTERVAL '7 DAY') OR order_date < join_date) THEN price * 2 *10
+		   		ELSE price * 10 END)AS points
+FROM dannys_diner.sales AS s
+	INNER JOIN dannys_diner.menu as men
+	ON men.product_id = s.product_id
+	RIGHT JOIN dannys_diner.members as m
+	ON m.customer_id = s.customer_id
+WHERE order_date <= '2021-01-31'
+GROUP BY s.customer_id
+ORDER BY points DESC;
+```
+
+|customer_id|order_date|product_name|price|mem|ranking|
+| --------- | --------- | ----- | ------- | --------- | ----- |
+|A|2021-01-01|sushi|10|N|NULL|
+|A|2021-01-01|curry|15|N|NULL|
+|A|2021-01-07|curry|15|Y|1|
+|A|2021-01-10|ramen|12|Y|2|
+|A|2021-01-11|ramen|12|Y|3|
+|A|2021-01-11|ramen|12|Y|3|
+|B|2021-01-01|curry|15|N|NULL|
+|B|2021-01-02|curry|15|N|NULL|
+|B|2021-01-04|sushi|10|N|NULL|
+|B|2021-01-11|sushi|10|Y|1|
+|B|2021-01-16|ramen|12|Y|2|
+|B|2021-02-01|ramen|12|Y|3|
+|C|2021-01-01|ramen|12|N|NULL|
+|C|2021-01-01|ramen|12|N|NULL|
+|C|2021-01-07|ramen|12|N|NULL|
 
 
