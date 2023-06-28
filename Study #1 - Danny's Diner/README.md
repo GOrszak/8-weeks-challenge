@@ -28,7 +28,8 @@ Three key datasets for this case study
 
 ## Entity Relationship Diagram
 
-![Schema](https://github.com/GOrszak/8-weeks-challenge/assets/134173513/46d5cd43-29c1-4937-8c47-fb41fe10e07a)
+
+![Schema](https://github.com/GOrszak/8-weeks-challenge/assets/134173513/bdb50062-cf3b-474b-8b31-f0934fb4ed3b)
 
 ## Case Study Questions
 1. What is the total amount each customer spent at the restaurant?
@@ -41,9 +42,6 @@ Three key datasets for this case study
 8. What is the total items and amount spent for each member before they became a member?
 9. If each $1 spent equates to 10 points and sushi has a 2x points multiplier - how many points would each customer have?
 10. In the first week after a customer joins the program (including their join date) they earn 2x points on all items, not just sushi - how many points do customer A and B have at the end of January?
-  
-Click [here](do dodania!)  to view the solution solution of the case study!
-
 
 ## Queries and answers
 
