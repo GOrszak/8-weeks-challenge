@@ -391,29 +391,145 @@ WHERE ranking =1;
 
 **6. What is the percentage split of revenue by product for each segment?**
 
+```sql
+SELECT  category_name,
+		segment_name,
+		product_name,
+		CONCAT(ROUND(sum1/ SUM(sum1) OVER (PARTITION BY segment_name) * 100,2),'%') AS percentage_by_segment
+FROM(SELECT  pd.category_name,
+	  		 pd.segment_name,
+			 pd.product_name,
+			 SUM(qty*s.price) AS sum1,
+			 RANK() OVER (PARTITION BY segment_name ORDER BY SUM(qty*s.price)) AS ranking
+	 FROM balanced_tree.product_details AS pd
+	 LEFT JOIN balanced_tree.sales AS s
+	 ON pd.product_id = s.prod_id
+	 GROUP BY pd.category_name, pd.segment_name, pd.product_name) AS x;
+```
+
 **Answer:**
+|category_name|segment_name|product_name|percentage_by_segment|
+|:----|:----|:----|:----|
+|Womens|Jacket|Khaki Suit Jacket - Womens|23.51%|
+|Womens|Jacket|Grey Fashion Jacket - Womens|57.03%|
+|Womens|Jacket|Indigo Rain Jacket - Womens|19.45%|
+|Womens|Jeans|Cream Relaxed Jeans - Womens|17.79%|
+|Womens|Jeans|Navy Oversized Jeans - Womens|24.06%|
+|Womens|Jeans|Black Straight Jeans - Womens|58.15%|
+|Mens|Shirt|Teal Button Up Shirt - Mens|8.98%|
+|Mens|Shirt|White Tee Shirt - Mens|37.43%|
+|Mens|Shirt|Blue Polo Shirt - Mens|53.60%|
+|Mens|Socks|White Striped Socks - Mens|20.18%|
+|Mens|Socks|Navy Solid Socks - Mens|44.33%|
+|Mens|Socks|Pink Fluro Polkadot Socks - Mens|35.50%|
 
 ***
 
 **7. What is the percentage split of revenue by segment for each category?**
 
+```sql
+SELECT  category_name,
+		segment_name,
+		CONCAT(ROUND(sum1/ SUM(sum1) OVER (PARTITION BY category_name) * 100,2),'%') AS percentage_by_segment
+FROM(SELECT  pd.category_name,
+	  		 pd.segment_name,
+			 SUM(qty*s.price) AS sum1
+	 FROM balanced_tree.product_details AS pd
+	 LEFT JOIN balanced_tree.sales AS s
+	 ON pd.product_id = s.prod_id
+	 GROUP BY pd.category_name, pd.segment_name) AS x
+ORDER BY category_name, percentage_by_segment DESC;
+```
+
 **Answer:**
+
+|category_name|segment_name|percentage_by_segment|
+|:----|:----|:----|
+|Mens|Shirt|56.87%|
+|Mens|Socks|43.13%|
+|Womens|Jacket|63.79%|
+|Womens|Jeans|36.21%|
 
 ***
 
 **8. What is the percentage split of total revenue by category?**
 
+```sql
+SELECT  x.category_id,
+		CONCAT(ROUND(sum1/ SUM(sum1) OVER () * 100,2),'%') AS percentage_by_segment
+FROM(SELECT  pd.category_id,
+			 SUM(qty*s.price) AS sum1
+	 FROM balanced_tree.product_details AS pd
+	 LEFT JOIN balanced_tree.sales AS s
+	 ON pd.product_id = s.prod_id
+	 GROUP BY pd.category_id) AS x;
+	 
+```
+
 **Answer:**
+
+|category_id|percetnage_by_segment|
+|:----|:----|
+|2|55.38%|
+|1|44.62%|
+
 
 ***
 
 **9. What is the total transaction “penetration” for each product? (hint: penetration = number of transactions where at least 1 quantity of a product was purchased divided by total number of transactions)**
 
+```sql
+SELECT  DISTINCT(product_id),
+		pd.product_name,
+		CONCAT( ROUND(100*COUNT(DISTINCT txn_id) :: NUMERIC /
+		(SELECT COUNT(DISTINCT txn_id)
+		FROM balanced_tree.product_details AS pd
+		LEFT JOIN balanced_tree.sales AS s
+		ON pd.product_id = s.prod_id),2),'%') AS penetration
+FROM balanced_tree.product_details AS pd
+LEFT JOIN balanced_tree.sales AS s
+ON pd.product_id = s.prod_id
+GROUP BY pd.product_id, pd.product_name;
+```
+
 **Answer:**
+
+|product_id|product_name|penetration|
+|:----|:----|:----|
+|2a2353|Blue Polo Shirt - Mens|50.72%|
+|2feb6bPink Fluro Polkadot Socks - Mens|50.32%|
+|5d267b|White Tee Shirt - Mens|50.72%|
+|72f5d4|Indigo Rain Jacket - Women|50.00%|
+|9ec847|Grey Fashion Jacket - Womens|51.00%|
+|b9a74d|White Striped Socks - Mens|49.72%|
+|c4a632|Navy Oversized Jeans - Womens|50.96%|
+|c8d436|Teal Button Up Shirt - Mens|49.68%|
+|d5e9a6|Khaki Suit Jacket - Womens|49.88%|
+|e31d39|Cream Relaxed Jeans - Womens|49.72%|
+|e83aa3|Black Straight Jeans - Womens|49.84%|
+|f084eb|Navy Solid Socks - Mens|51.24%|
+
+
+
+"2a2353"	"Blue Polo Shirt - Mens"	"50.72%"
+"2feb6b"	"Pink Fluro Polkadot Socks - Mens"	"50.32%"
+"5d267b"	"White Tee Shirt - Mens"	"50.72%"
+"72f5d4"	"Indigo Rain Jacket - Womens"	"50.00%"
+"9ec847"	"Grey Fashion Jacket - Womens"	"51.00%"
+"b9a74d"	"White Striped Socks - Mens"	"49.72%"
+"c4a632"	"Navy Oversized Jeans - Womens"	"50.96%"
+"c8d436"	"Teal Button Up Shirt - Mens"	"49.68%"
+"d5e9a6"	"Khaki Suit Jacket - Womens"	"49.88%"
+"e31d39"	"Cream Relaxed Jeans - Womens"	"49.72%"
+"e83aa3"	"Black Straight Jeans - Womens"	"49.84%"
+"f084eb"	"Navy Solid Socks - Mens"	"51.24%"
 
 ***
 
 **10. What is the most common combination of at least 1 quantity of any 3 products in a 1 single transaction?**
+
+```sql
+
 
 **Answer:**
 
@@ -431,10 +547,3 @@ Feel free to split up your final outputs into as many tables as you need - but b
 
 ***
 
-## 💡 Bonus Challenge
-
-Use a single SQL query to transform the `product_hierarchy` and `product_prices` datasets to the `product_details` table.
-
-Hint: you may want to consider using a recursive CTE to solve this problem!
-
-***
