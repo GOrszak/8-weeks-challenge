@@ -497,7 +497,7 @@ GROUP BY pd.product_id, pd.product_name;
 |product_id|product_name|penetration|
 |:----|:----|:----|
 |2a2353|Blue Polo Shirt - Mens|50.72%|
-|2feb6bPink Fluro Polkadot Socks - Mens|50.32%|
+|2feb6b|Pink Fluro Polkadot Socks - Mens|50.32%|
 |5d267b|White Tee Shirt - Mens|50.72%|
 |72f5d4|Indigo Rain Jacket - Women|50.00%|
 |9ec847|Grey Fashion Jacket - Womens|51.00%|
@@ -509,20 +509,6 @@ GROUP BY pd.product_id, pd.product_name;
 |e83aa3|Black Straight Jeans - Womens|49.84%|
 |f084eb|Navy Solid Socks - Mens|51.24%|
 
-
-
-"2a2353"	"Blue Polo Shirt - Mens"	"50.72%"
-"2feb6b"	"Pink Fluro Polkadot Socks - Mens"	"50.32%"
-"5d267b"	"White Tee Shirt - Mens"	"50.72%"
-"72f5d4"	"Indigo Rain Jacket - Womens"	"50.00%"
-"9ec847"	"Grey Fashion Jacket - Womens"	"51.00%"
-"b9a74d"	"White Striped Socks - Mens"	"49.72%"
-"c4a632"	"Navy Oversized Jeans - Womens"	"50.96%"
-"c8d436"	"Teal Button Up Shirt - Mens"	"49.68%"
-"d5e9a6"	"Khaki Suit Jacket - Womens"	"49.88%"
-"e31d39"	"Cream Relaxed Jeans - Womens"	"49.72%"
-"e83aa3"	"Black Straight Jeans - Womens"	"49.84%"
-"f084eb"	"Navy Solid Socks - Mens"	"51.24%"
 
 ***
 
