@@ -260,18 +260,18 @@ ORDER BY hrs;
 
 SELECT  to_char(order_time, 'Day') as dayz,
 		COUNT(*),
-		ROUND(COUNT(*)*100/ SUM(COUNT(*)) OVER(),2)
+		ROUND(COUNT(*)*100/ SUM(COUNT(*)) OVER(),2) AS per
 FROM pizza_runner.customer_orders_temp
 GROUP BY dayz
 ORDER BY dayz;
 
 ```
-|dayz|count|round|
+|dayz|count|per|
 |---|---|---|
-|Friday|	1	|7.14|
-|Saturday|	5	|35.71|
-|Thursday|	3	|21.43|
-|Wednesday|	5	|35.71|
+|Friday|1|7.14|
+|Saturday|5|35.71|
+|Thursday|3|21.43|
+|Wednesday|5|35.71|
 
 
 -------------
@@ -282,25 +282,125 @@ ORDER BY dayz;
 -------------
 
 #### 1. How many runners signed up for each 1 week period? (i.e. week starts 2021-01-01)
+```sql
+
+SELECT  TO_CHAR(registration_date, 'ww')::INT AS week_number,
+		COUNT(*)
+FROM pizza_runner.runners
+GROUP BY week_number;
+
+
+
+```
+|week_number|count|
+|---|---|
+|3|1|
+|2|1|
+|1|2|
+
 
 
 -------------
 
 #### 2. What was the average time in minutes it took for each runner to arrive at the Pizza Runner HQ to pickup the order?
 
+```sql
+
+SELECT  runner_id,
+		AVG(ROUND(EXTRACT(epoch FROM CAST(pickup_time AS TIMESTAMP) - c.order_time) / 60,2)) 
+FROM pizza_runner.runner_orders AS r
+LEFT JOIN pizza_runner.customer_orders AS c
+ON r.order_id = c.order_id
+WHERE pickup_time is not null 
+	AND pickup_time<>'null'
+GROUP BY runner_id;
+
+
+```
+|runner_id|avg|
+|---|---|
+|3|10.4700000000000000|
+|2|23.7180000000000000|
+|1|15.6766666666666667|
 
 -------------
-
 #### 3. Is there any relationship between the number of pizzas and how long the order takes to prepare?
 
+```sql
+
+WITH no_of_pizza AS (
+SELECT  r.order_id, 
+		COUNT(r.order_id) as counted,
+		ROUND(EXTRACT(epoch FROM CAST(pickup_time AS TIMESTAMP) - c.order_time)/ 60,2) AS time_counted
+FROM pizza_runner.runner_orders AS r
+LEFT JOIN pizza_runner.customer_orders AS c
+ON r.order_id = c.order_id
+WHERE pickup_time is not null 
+	AND pickup_time<>'null'
+GROUP BY r.order_id, pickup_time, order_time)
+
+SELECT  counted,
+		AVG(time_counted)
+FROM no_of_pizza
+GROUP BY counted;
+
+
+
+```
+|counted|avg|
+|---|---|
+|3|29.2800000000000000|
+|2|18.3750000000000000|
+|1|12.3560000000000000|
+
+
+- On average, a single pizza order takes 12 minutes to prepare.
+- An order with 3 pizzas takes 30 minutes at an average of 10 minutes per pizza.
+- It takes 18 minutes to prepare an order with 2 pizzas which is 9 minutes per pizza — making 2 pizzas in a single order the ultimate efficiency rate.
 
 -------------
 
 #### 4. What was the average distance travelled for each customer?
 
+```sql
+
+SELECT customer_id,ROUND(AVG(CAST(distance AS numeric)),2)
+FROM pizza_runner.runner_orders_temp AS r
+LEFT JOIN pizza_runner.customer_orders AS c
+ON r.order_id = c.order_id
+WHERE pickup_time is not null 
+	AND pickup_time<>'null'
+GROUP BY customer_id;
+						 
+
+
+
+```
+|customer_id|round|
+|---|---|
+|101|20.00|
+|103|23.40|
+|104|10.00|
+|105|25.00|
+|102|16.73|
+
+
 -------------
 
 #### 5. What was the difference between the longest and shortest delivery times for all orders?
+
+```sql
+
+SELECT MIN(duration) minimum_duration,
+       MAX(duration) AS maximum_duration,
+       MAX(duration) - MIN(duration) AS maximum_difference
+FROM runner_orders_temp;		 
+
+
+```
+|minimum_duration|maximum_duration|maximum_difference|
+|---|---|---|
+|10|40|30|
 
 
 -------------
