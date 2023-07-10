@@ -407,12 +407,154 @@ FROM runner_orders_temp;
 
 #### 6. What was the average speed for each runner for each delivery and do you notice any trend for these values?
 
+```sql
+
+SELECT  runner_id,
+		distance AS distance_km,
+		ROUND(CAST(duration AS numeric)/60,2) AS duration_hr,
+		CAST((distance/ (duration/60)) AS bigint) AS km_per_h
+FROM runner_orders_temp
+WHERE pickup_time is not null 
+	AND pickup_time<>'null'
+ORDER BY runner_id;	 
+
+
+```
+|runner_id|distance_km|duration_hr|km_per_h|
+|---|---|---|---|
+|1|20|0.53|38|
+|1|20|0.45|44|
+|1|13.4|0.33|40|
+|1|10|0.17|60|
+|2|25|0.42|60|
+|2|23.4|0.25|94|
+|2|23.4|0.67|35|
+|3|10|0.25|40|
+
+- Runner with number 2 has the biggest average km/h ~ 60
+
 
 -------------
 
 #### 7. What is the successful delivery percentage for each runner?
 
+```sql
+
+SELECT runner_id,
+       COUNT(pickup_time) AS delivered_orders,
+       COUNT(*) AS total_orders,
+       ROUND(100 * COUNT(pickup_time) / COUNT(*)) AS delivery_success_percentage
+FROM runner_orders_temp
+GROUP BY runner_id
+ORDER BY runner_id;
+
+
+```
+|runner_id|delivered_orders|total_orders|delivery_success_percentage|
+|---|---|---|---|
+|1|4|4|100|
+|2|3|4|75|
+|3|1|2|50|
 
 -------------
+
+
+### C. Ingredient Optimisation
+
+#### 1. What are the standard ingredients for each pizza?
+
+```sql
+
+SELECT  pn.pizza_id,
+		pizza_name, 
+		STRING_AGG(topping_name,',')
+FROM pizza_runner.pizza_names  AS pn
+LEFT JOIN  pizza_runner.pizza_recipes_clean AS prc
+ON pn.pizza_id = prc.pizza_id
+LEFT JOIN  pizza_runner.pizza_toppings AS pt
+ON CAST(prc.toppings AS INTEGER) = pt.topping_id
+GROUP BY pizza_name, pn.pizza_id;
+
+
+```
+|pizza_id|pizza_name|string_agg|
+|---|---|---|
+|2|Vegetarian|Tomato Sauce,Cheese,Mushrooms,Onions,Peppers,Tomatoes|
+|1|Meatlovers|BBQ Sauce,Pepperoni,Cheese,Salami,Chicken,Bacon,Mushrooms,Beef|
+
+-------------
+
+
+
+#### 2 What was the most commonly added extra? --
+
+```sql
+
+WITH tcol1 AS ( SELECT  split_part(extras, ',',1) AS col1
+FROM pizza_runner.customer_orders_temp
+			  WHERE extras IS NOT NULL),
+tcol2 AS (SELECT split_part(extras, ',',2) AS col2
+FROM pizza_runner.customer_orders_temp
+		 WHERE extras IS NOT NULL),
+merged AS (
+SELECT * FROM tcol1
+UNION ALL
+SELECT * FROM tcol2)
+		
+		
+
+SELECT col1 AS id,  COUNT(*) AS total, tn.topping_name
+FROM merged
+INNER JOIN pizza_runner.pizza_toppings  tn 
+ON merged.col1 = CAST(tn.topping_id AS TEXT)
+GROUP BY col1, tn.topping_name
+ORDER BY total DESC
+LIMIT 1;	
+
+
+```
+|id|total|topping_name|
+|---|---|---|
+|1|4|Bacon|
+
+
+-------------
+
+
+#### 3 What was the most common exclusion?
+
+```sql
+
+WITH tcol1 AS ( SELECT  split_part(exclusions, ',',1) AS col1
+FROM pizza_runner.customer_orders_temp
+			  WHERE exclusions IS NOT NULL),
+tcol2 AS (SELECT split_part(exclusions, ',',2) AS col2
+FROM pizza_runner.customer_orders_temp
+		 WHERE exclusions IS NOT NULL),
+merged AS (
+SELECT * FROM tcol1
+UNION ALL
+SELECT * FROM tcol2)
+	
+-- SELECT * FROM  pizza_runner.customer_orders_temp;
+
+SELECT col1 AS id,  COUNT(*) AS total, tn.topping_name
+FROM merged
+INNER JOIN pizza_runner.pizza_toppings  tn 
+ON merged.col1 = CAST(tn.topping_id AS TEXT)
+GROUP BY col1, tn.topping_name
+ORDER BY total DESC
+LIMIT 1;	
+
+
+```
+|id|total|topping_name|
+|---|---|---|
+|1|4|Cheese|
+
+
+-------------
+
+
 
 
