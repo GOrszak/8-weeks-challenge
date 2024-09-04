@@ -57,11 +57,7 @@ FROM customer_nodes;
 
 ````
 
-**Answer:**
-
-
-
-- There are 5 unique nodes on the Data Bank system.
+![obraz](https://github.com/user-attachments/assets/c411e74f-56e1-4d7f-8bec-dbf8c2689222)
 
 ***
 
@@ -74,79 +70,158 @@ SELECT  region_name
 LEFT JOIN customer_nodes AS cn
 ON r.region_id = cn.region_id
 GROUP BY r.region_name;
+
 ````
 
-**Answer:**
-
-|region_name|node_count|
-|:----|:----|
-|Africa|5|
-|America|5|
-|Asia|5|
-|Australia|5|
-|Europe|5|
+![obraz](https://github.com/user-attachments/assets/ecd1c6a2-e914-4e0b-b584-444500aac31f)
 
 ***
 
 **3. How many customers are allocated to each region?**
 
 ````sql
-SELECT 
-  region_id, 
-  COUNT(customer_id) AS customer_count
-FROM data_bank.customer_nodes
-GROUP BY region_id
-ORDER BY region_id;
+SELECT  r.region_name
+		,COUNT(DISTINCT customer_id)
+	FROM customer_nodes AS ct
+LEFT JOIN regions AS r
+	ON ct.region_id = r.region_id
+GROUP BY r.region_name;
 ````
+![obraz](https://github.com/user-attachments/assets/ead8c930-1ede-441e-93e3-844103182dbf)
 
-**Answer:**
-
-|region_id|customer_count|
-|:----|:----|
-|1|770|
-|2|735|
-|3|714|
-|4|665|
-|5|616|
 
 ***
 
 **4. How many days on average are customers reallocated to a different node?**
 
-````sql
-WITH node_days AS (
-  SELECT 
-    customer_id, 
-    node_id,
-    end_date - start_date AS days_in_node
-  FROM data_bank.customer_nodes
-  WHERE end_date != '9999-12-31'
-  GROUP BY customer_id, node_id, start_date, end_date
-) 
-, total_node_days AS (
-  SELECT 
-    customer_id,
-    node_id,
-    SUM(days_in_node) AS total_days_in_node
-  FROM node_days
-  GROUP BY customer_id, node_id
-)
+This questions is harder than is seems to be. Here is my approach step by step to help understand thought process behind solution.
 
-SELECT ROUND(AVG(total_days_in_node)) AS avg_node_reallocation_days
-FROM total_node_days;
+````sql
+SELECT *
+		,case when lead(node_id) over(partition by customer_id order by customer_id asc, start_date asc) = node_id then 0 else 1 end as test
+from customer_nodes
+	order by customer_id asc, start_date asc)
+````
+![obraz](https://github.com/user-attachments/assets/caa44e9b-5069-448b-8c5c-988f7d808c00)
+
+I created test column that will indefy if node has been changed. if yes it will show 1. For example first value is 0 because node did not change. Second value is 1 because it changed from node number 4 to node number 2. Therefore I found issue that even though there is no change between 2 last rows value is still one. It is same pattern (I checked for random clients) so 2nd step was to substract 1 from sum of change (on user level)
+
+````sql
+WITH cte AS (
+SELECT *
+		,case when lead(node_id) over(partition by customer_id order by customer_id asc, start_date asc) = node_id then 0 else 1 end as test
+from customer_nodes
+	order by customer_id asc, start_date asc),
+
+count_changes AS (
+	SELECT customer_id, SUM(test)-1 as changes_in_total
+from cte
+	group by customer_id)
+
+	SELECT * from count_changes;
 ````
 
-**Answer:**
+![obraz](https://github.com/user-attachments/assets/4217bda3-b70a-4850-9d95-b418898cc1ca)
 
-|avg_node_reallocation_days|
-|:----|
-|24|
+Number of changes per client
 
-- On average, customers are reallocated to a different node every 24 days.
+````sql
+WITH cte AS (
+SELECT *
+		,case when lead(node_id) over(partition by customer_id order by customer_id asc, start_date asc) = node_id then 0 else 1 end as test
+from customer_nodes
+	order by customer_id asc, start_date asc),
+
+count_changes AS (
+	SELECT customer_id, SUM(test)-1 as changes_in_total
+from cte
+	group by customer_id)
+
+	
+SELECT cc.customer_id, round((max(start_date) - min(start_date))*1.0/cc.changes_in_total,2)as relocation
+from customer_nodes as cn
+left join count_changes as cc
+	on cn.customer_id = cc.customer_id
+group by cc.customer_id,cc.changes_in_total
+	order by cc.customer_id asc
+````
+
+![obraz](https://github.com/user-attachments/assets/349e63f0-5a58-40b1-bc83-ffdd27819f5f)
+
+Amount of days that account is active divided by amount of node change per client. 
+
+````sql
+WITH cte AS (
+SELECT *
+		,case when lead(node_id) over(partition by customer_id order by customer_id asc, start_date asc) = node_id then 0 else 1 end as test
+from customer_nodes
+	order by customer_id asc, start_date asc),
+
+count_changes AS (
+	SELECT customer_id, SUM(test)-1 as changes_in_total
+from cte
+	group by customer_id)
+
+	
+SELECT ROUND(AVG(relocation),0) 
+FROM(
+	
+SELECT cc.customer_id, round((max(start_date) - min(start_date))*1.0/cc.changes_in_total,2)as relocation
+from customer_nodes as cn
+left join count_changes as cc
+	on cn.customer_id = cc.customer_id
+group by cc.customer_id,cc.changes_in_total
+	order by cc.customer_id asc  ) as sub;
+
+````
+
+Final code with solution
+
+![obraz](https://github.com/user-attachments/assets/fc1e45c6-4f9d-4e97-a979-fc036615594c)
+
+
+
 
 ***
 
 **5. What is the median, 80th and 95th percentile for this same reallocation days metric for each region?**
+
+````sql
+WITH cte AS (
+SELECT cn.*
+		,case when lead(node_id) over(partition by customer_id order by customer_id asc, start_date asc) = node_id then 0 else 1 end as test
+from customer_nodes as cn
+	order by customer_id asc, start_date asc),
+	
+count_changes AS (
+	SELECT customer_id, region_id, SUM(test)-1 as changes_in_total
+from cte
+	group by customer_id, region_id
+order by customer_id),
+
+avg_per_client_and_region AS (
+	SELECT cc.customer_id, r.region_name , round((max(start_date) - min(start_date))*1.0/cc.changes_in_total,2)as relocation
+from customer_nodes as cn
+	left join count_changes as cc
+		on cn.customer_id = cc.customer_id
+left join regions as r
+	on r.region_id = cc.region_id
+group by cc.customer_id, r.region_name,cc.changes_in_total
+	order by cc.customer_id asc)
+
+
+SELECT DISTINCT region_name,
+	(SELECT ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP(ORDER BY relocation)::NUMERIC,0) FROM avg_per_client_and_region AS apc WHERE apc.region_name = avg_per_client_and_region.region_name) AS median,
+	(SELECT ROUND(PERCENTILE_CONT(0.8) WITHIN GROUP(ORDER BY relocation)::NUMERIC,0) FROM avg_per_client_and_region AS apc WHERE apc.region_name = avg_per_client_and_region.region_name) AS percentile_80, 
+	(SELECT ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP(ORDER BY relocation)::NUMERIC,0) FROM avg_per_client_and_region AS apc WHERE apc.region_name = avg_per_client_and_region.region_name) AS percentile_95
+FROM avg_per_client_and_region;
+
+
+````
+Same approach as in 4th Exercise 
+
+![obraz](https://github.com/user-attachments/assets/bf2e4cb4-ee54-4775-9aac-c9c74b3e3ca8)
+
 
 
 
@@ -157,173 +232,108 @@ FROM total_node_days;
 **1. What is the unique count and total amount for each transaction type?**
 
 ````sql
-SELECT
-  txn_type, 
-  COUNT(customer_id) AS transaction_count, 
-  SUM(txn_amount) AS total_amount
-FROM data_bank.customer_transactions
+SELECT  txn_type
+	,COUNT(*)
+	,SUM(txn_amount)
+FROM customer_transactions
 GROUP BY txn_type;
+
 ````
 
-**Answer:**
-
-|txn_type|transaction_count|total_amount|
-|:----|:----|:----|
-|purchase|1617|806537|
-|deposit|2671|1359168|
-|withdrawal|1580|793003|
+![obraz](https://github.com/user-attachments/assets/5bde89db-a645-4140-bf45-ba19249a357f)
 
 ***
 
 **2. What is the average total historical deposit counts and amounts for all customers?**
 
 ````sql
-WITH deposits AS (
-  SELECT 
-    customer_id, 
-    COUNT(customer_id) AS txn_count, 
-    AVG(txn_amount) AS avg_amount
-  FROM data_bank.customer_transactions
-  WHERE txn_type = 'deposit'
-  GROUP BY customer_id
-)
+WITH cte AS (
+SELECT  customer_id
+		,COUNT(*) deposits
+		,SUM(txn_amount) depo_sum
+FROM customer_transactions
+WHERE txn_type = 'deposit'
+GROUP BY customer_id)
 
-SELECT 
-  ROUND(AVG(txn_count)) AS avg_deposit_count, 
-  ROUND(AVG(avg_amount)) AS avg_deposit_amt
-FROM deposits;
+
+SELECT  ROUND(AVG(deposits),2) AS avg_nbr_depo
+		,ROUND(AVG(depo_sum),2) as avg_sum_depo
+FROM cte;
 ````
-**Answer:**
 
-|avg_deposit_count|avg_deposit_amt|
-|:----|:----|
-|5|509|
-
-- The average historical deposit count is 5 and the average historical deposit amount is $ 509.
+![obraz](https://github.com/user-attachments/assets/85133766-4810-4fd2-bc1a-e597b8e950b0)
 
 ***
 
 **3. For each month - how many Data Bank customers make more than 1 deposit and either 1 purchase or 1 withdrawal in a single month?**
 
-First, create a CTE called `monthly_transactions` to determine the count of deposit, purchase and withdrawal for each customer categorised by month using `CASE` statement and `SUM()`. 
+First, create a CTE  to determine the count of deposit, purchase and withdrawal for each customer categorised by month using `CASE` statement and `SUM()`. 
 
 In the main query, select the `mth` column and count the number of unique customers where:
-- `deposit_count` is greater than 1, indicating more than one deposit (`deposit_count > 1`).
-- Either `purchase_count` is greater than or equal to 1 (`purchase_count >= 1`) OR `withdrawal_count` is greater than or equal to 1 (`withdrawal_count >= 1`).
+- `depo` is greater than 1, indicating more than one deposit 
+- Either `purch` is greater than or equal to 1  OR `withd` is greater than or equal to 1 
 
 ````sql
-WITH monthly_transactions AS (
-  SELECT 
-    customer_id, 
-    DATE_PART('month', txn_date) AS mth,
-    SUM(CASE WHEN txn_type = 'deposit' THEN 0 ELSE 1 END) AS deposit_count,
-    SUM(CASE WHEN txn_type = 'purchase' THEN 0 ELSE 1 END) AS purchase_count,
-    SUM(CASE WHEN txn_type = 'withdrawal' THEN 1 ELSE 0 END) AS withdrawal_count
-  FROM data_bank.customer_transactions
-  GROUP BY customer_id, DATE_PART('month', txn_date)
-)
+WITH cte AS (
+SELECT   customer_id
+		,EXTRACT(month from txn_date) as mth_number
+		,sum(case when txn_type = 'deposit' then 1 else 0 end) as depo
+		,sum(case when txn_type = 'purchase' then 1 else 0 end) as purch
+		,sum(case when txn_type = 'withdrawal' then 1 else 0 end) as withd
+FROM customer_transactions
+GROUP BY customer_id,EXTRACT(month from txn_date)
+order by customer_id asc)
 
-SELECT
-  mth,
-  COUNT(DISTINCT customer_id) AS customer_count
-FROM monthly_transactions
-WHERE deposit_count > 1 
-  AND (purchase_count >= 1 OR withdrawal_count >= 1)
-GROUP BY mth
-ORDER BY mth;
+
+SELECT  mth_number, COUNT(*)
+FROM cte
+WHERE depo > 1 AND (purch = 1 OR withd = 1)
+GROUP BY mth_number;
+
 ````
+![obraz](https://github.com/user-attachments/assets/03ca68ee-8752-447a-a5ab-d87239010b08)
 
-**Answer:**
-
-|month|customer_count|
-|:----|:----|
-|1|170|
-|2|277|
-|3|292|
-|4|103|
 
 ***
 
 **4. What is the closing balance for each customer at the end of the month? Also show the change in balance each month in the same table output.**
 
-Update Jun 2, 2023: Even after 2 years, I continue to find this question incredibly challenging. I have cleaned up the code and provided additional explanations. 
-
-The key aspect to understanding the solution is to build up the tabele and run the CTEs cumulatively (run CTE 1 first, then run CTE 1 & 2, and so on). This approach allows for a better understanding of why specific columns were created or how the information in the tables progressed. 
 
 ```sql
--- CTE 1 - To identify transaction amount as an inflow (+) or outflow (-)
-WITH monthly_balances_cte AS (
-  SELECT 
-    customer_id, 
-    (DATE_TRUNC('month', txn_date) + INTERVAL '1 MONTH - 1 DAY') AS closing_month, 
-    SUM(CASE 
-      WHEN txn_type = 'withdrawal' OR txn_type = 'purchase' THEN -txn_amount
-      ELSE txn_amount END) AS transaction_balance
-  FROM data_bank.customer_transactions
-  GROUP BY 
-    customer_id, txn_date 
-)
+WITH cte as (SELECT customer_id, txn_date, txn_type, 
+case when txn_type = 'purchase' then txn_amount*(-1)
+when txn_type = 'withdrawal' then txn_amount*(-1)
+	else txn_amount end as txn_amount_changed
+	from customer_transactions
+order by customer_id asc),
+cte_final as (SELECT  customer_id
+		,txn_date
+		,txn_amount_changed
+		,sum(txn_amount_changed) over(partition by customer_id  order by txn_date asc) as final_amount
+		,rank() over(partition by customer_id, extract(month from txn_date) order by txn_date desc) as ranking
+from cte)
 
--- CTE 2 - Use GENERATE_SERIES() to generate as a series of last day of the month for each customer.
-, monthend_series_cte AS (
-  SELECT
-    DISTINCT customer_id,
-    ('2020-01-31'::DATE + GENERATE_SERIES(0,3) * INTERVAL '1 MONTH') AS ending_month
-  FROM data_bank.customer_transactions
-)
-
--- CTE 3 - Calculate total monthly change and ending balance for each month using window function SUM()
-, monthly_changes_cte AS (
-  SELECT 
-    monthend_series_cte.customer_id, 
-    monthend_series_cte.ending_month,
-    SUM(monthly_balances_cte.transaction_balance) OVER (
-      PARTITION BY monthend_series_cte.customer_id, monthend_series_cte.ending_month
-      ORDER BY monthend_series_cte.ending_month
-    ) AS total_monthly_change,
-    SUM(monthly_balances_cte.transaction_balance) OVER (
-      PARTITION BY monthend_series_cte.customer_id 
-      ORDER BY monthend_series_cte.ending_month
-      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    ) AS ending_balance
-  FROM monthend_series_cte
-  LEFT JOIN monthly_balances_cte
-    ON monthend_series_cte.ending_month = monthly_balances_cte.closing_month
-    AND monthend_series_cte.customer_id = monthly_balances_cte.customer_id
-)
-
--- Final query: Display the output of customer monthly statement with the ending balances. 
-SELECT 
-customer_id, 
-  ending_month, 
-  COALESCE(total_monthly_change, 0) AS total_monthly_change, 
-  MIN(ending_balance) AS ending_balance
- FROM monthly_changes_cte
- GROUP BY 
-  customer_id, ending_month, total_monthly_change
- ORDER BY 
-  customer_id, ending_month;
+SELECT  customer_id
+		,EXTRACT(month from txn_date) as mth
+		,final_amount
+FROM cte_final
+where ranking = 1;
 ```
 
-**Answer:**
+![obraz](https://github.com/user-attachments/assets/1e084fff-cad0-4cd0-be40-11e4b9676958)
 
-Showing results for customers ID 1, 2 and 3 only:
-|customer_id|ending_month|total_monthly_change|ending_balance|
-|:----|:----|:----|:----|
-|1|2020-01-31T00:00:00.000Z|312|312|
-|1|2020-02-29T00:00:00.000Z|0|312|
-|1|2020-03-31T00:00:00.000Z|-952|-964|
-|1|2020-04-30T00:00:00.000Z|0|-640|
-|2|2020-01-31T00:00:00.000Z|549|549|
-|2|2020-02-29T00:00:00.000Z|0|549|
-|2|2020-03-31T00:00:00.000Z|61|610|
-|2|2020-04-30T00:00:00.000Z|0|610|
-|3|2020-01-31T00:00:00.000Z|144|144|
-|3|2020-02-29T00:00:00.000Z|-965|-821|
-|3|2020-03-31T00:00:00.000Z|-401|-1222|
-|3|2020-04-30T00:00:00.000Z|493|-729|
+1. Dividing tranasction based on category (when withdrawal or purchase then value * (-1))
+
+2. Sum over transaction amount 
+
+3. rank function to determinate last transaction of the month which would be ranked as 1
+
+4. Selecting latest transaction of each month, thanks to summing over we have balance at the end of the each month
+
+
 
 ***
+
 
 **5. Comparing the closing balance of a customer’s first month and the closing balance from their second nth, what percentage of customers:**
 
@@ -332,65 +342,38 @@ For this question, I have created 2 temporary tables to solve the questions belo
 - Use temp table #1 `ranked_monthly_balances` to create temp table #2 by applying the `ROW_NUMBER()` function. 
 
 ```sql
--- Temp table #1: Create a temp table using Question 4 solution
-CREATE TEMP TABLE customer_monthly_balances AS (
-  WITH monthly_balances_cte AS (
-  SELECT 
-    customer_id, 
-    (DATE_TRUNC('month', txn_date) + INTERVAL '1 MONTH - 1 DAY') AS closing_month, 
-    SUM(CASE 
-      WHEN txn_type = 'withdrawal' OR txn_type = 'purchase' THEN -txn_amount
-      ELSE txn_amount END) AS transaction_balance
-  FROM data_bank.customer_transactions
-  GROUP BY 
-    customer_id, txn_date 
-), monthend_series_cte AS (
-  SELECT
-    DISTINCT customer_id,
-    ('2020-01-31'::DATE + GENERATE_SERIES(0,3) * INTERVAL '1 MONTH') AS ending_month
-  FROM data_bank.customer_transactions
-), monthly_changes_cte AS (
-  SELECT 
-    monthend_series_cte.customer_id, 
-    monthend_series_cte.ending_month,
-    SUM(monthly_balances_cte.transaction_balance) OVER (
-      PARTITION BY monthend_series_cte.customer_id, monthend_series_cte.ending_month
-      ORDER BY monthend_series_cte.ending_month
-    ) AS total_monthly_change,
-    SUM(monthly_balances_cte.transaction_balance) OVER (
-      PARTITION BY monthend_series_cte.customer_id 
-      ORDER BY monthend_series_cte.ending_month
-      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    ) AS ending_balance
-  FROM monthend_series_cte
-  LEFT JOIN monthly_balances_cte
-    ON monthend_series_cte.ending_month = monthly_balances_cte.closing_month
-    AND monthend_series_cte.customer_id = monthly_balances_cte.customer_id 
-)
+WITH cte as (SELECT customer_id, txn_date, txn_type, 
+case when txn_type = 'purchase' then txn_amount*(-1)
+when txn_type = 'withdrawal' then txn_amount*(-1)
+	else txn_amount end as txn_amount_changed
+	from customer_transactions
+order by customer_id asc),
+cte_grouped as (SELECT  customer_id
+		,txn_date
+		,txn_amount_changed
+		,sum(txn_amount_changed) over(partition by customer_id  order by txn_date asc) as final_amount
+		,rank() over(partition by customer_id, extract(month from txn_date) order by txn_date desc) as ranking
+from cte),
 
-SELECT 
-  customer_id, 
-  ending_month, 
-  COALESCE(total_monthly_change, 0) AS total_monthly_change, 
-  MIN(ending_balance) AS ending_balance
-FROM monthly_changes_cte
-GROUP BY 
-  customer_id, ending_month, total_monthly_change
-ORDER BY 
-  customer_id, ending_month;
-);
-
--- Temp table #2: Create a temp table using temp table #1 `customer_monthly_balances`
-CREATE TEMP TABLE ranked_monthly_balances AS (
-  SELECT 
-    customer_id, 
-    ending_month, 
-    ending_balance,
-    ROW_NUMBER() OVER (
-      PARTITION BY customer_id 
-      ORDER BY ending_month) AS sequence
-  FROM customer_monthly_balances
-);
+cte_test as (
+SELECT * FROM(
+	SELECT  customer_id
+		,EXTRACT(month from txn_date) as mth
+		,final_amount
+		,COALESCE(LAG(final_amount) OVER (PARTITION BY customer_id ORDER BY EXTRACT(month from txn_date)),final_amount) as previous_month_amount
+		,final_amount -  (COALESCE(LAG(final_amount) OVER (PARTITION BY customer_id ORDER BY EXTRACT(month from txn_date)),final_amount))
+		,ROUND((final_amount -  (COALESCE(LAG(final_amount) OVER (PARTITION BY customer_id ORDER BY EXTRACT(month from txn_date)),final_amount)))*100.0
+		/NULLIF(ABS(COALESCE(LAG(final_amount) OVER (PARTITION BY customer_id ORDER BY EXTRACT(month from txn_date)),0)),0),2) as prc
+FROM cte_grouped
+	WHERE ranking = 1)
+WHERE prc is not null)
+	
+SELECT ROUND(COUNT(DISTINCT customer_id)*100.0/(SELECT COUNT(DISTINCT customer_id) FROM cte_test),2)
+FROM cte_test 
+WHERE customer_id NOT IN (
+    SELECT customer_id
+    FROM cte_test 
+    WHERE prc < 5.00)
 ```
 
 **- What percentage of customers have a negative first month balance? What percentage of customers have a positive first month balance?**
