@@ -406,7 +406,7 @@ Using all of the data available - how much data would have been required for eac
 
 
 
-**- Running customer balance column that includes the impact each transaction**
+** Running customer balance column that includes the impact each transaction**
 
 ````sql
 SELECT customer_id,
@@ -425,7 +425,7 @@ FROM customer_transactions;
 
 ***
 
-**- Customer balance at the end of each month**
+** Customer balance at the end of each month**
 
 ````sql
 SELECT customer_id,
@@ -446,7 +446,7 @@ FROM customer_transactions;
 
 ***
 
-**- Minimum, average and maximum values of the running balance for each customer**
+** Minimum, average and maximum values of the running balance for each customer**
 
 ````sql
 SELECT  DISTINCT customer_id,
@@ -470,5 +470,75 @@ ORDER BY customer_id;
 
 
 ***
+
+** Option 1: data is allocated based off the amount of money at the end of the previous month**
+
+````sql
+with recursive cte(mth) as(
+	SELECT 1 as mth
+
+	UNION ALL
+
+	SELECT c.mth+1
+	FROM cte as c
+	WHERE c.mth <5
+)
+	
+SELECT c.mth, running_balance,  LAG(running_balance,1) OVER() as budget_per_month
+	FROM(
+
+SELECT  DISTINCT ON (EXTRACT(MONTH from txn_date))
+		EXTRACT(MONTH from txn_date) as month_nbr,
+		SUM(CASE WHEN txn_type = 'deposit' THEN txn_amount
+		WHEN txn_type = 'withdrawal' THEN -txn_amount
+		WHEN txn_type = 'purchase' THEN -txn_amount
+		ELSE 0
+	   END) OVER(PARTITION BY extract(month from txn_date)) AS running_balance
+FROM customer_transactions) as sub
+	RIGHT JOIN cte as c
+ON sub.month_nbr = c.mth;
+````
+![obraz](https://github.com/user-attachments/assets/7b70881a-7432-4ab5-87d5-dd42be5a9f6b)
+
+Creating recursive cte to join month number of month. I did it because I had to use `lag` function 
+
+
+***
+
+** Option 2 & 3: data is allocated on the average amount of money kept in the account in the previous 30 days & data is updated real-time**
+
+````sql
+
+WITH running_balance AS (
+    SELECT txn_date,
+           txn_amount,
+           SUM(CASE 
+                 WHEN txn_type = 'deposit' THEN txn_amount
+                 WHEN txn_type = 'withdrawal' THEN -txn_amount
+                 WHEN txn_type = 'purchase' THEN -txn_amount
+                 ELSE 0
+               END) OVER (ORDER BY txn_date) AS running_balance
+    FROM customer_transactions
+)
+SELECT DISTINCT r1.txn_date, running_balance,
+                ROUND((SELECT AVG(r2.running_balance)
+                 FROM running_balance r2
+                 WHERE r2.txn_date BETWEEN r1.txn_date - INTERVAL '30 days' AND r1.txn_date
+                ),0) AS avg_30_day_balance
+FROM running_balance r1
+ORDER BY r1.txn_date;
+````
+![obraz](https://github.com/user-attachments/assets/a5758d7f-bdc6-41d2-af40-117d4b3ef8f7)
+
+
+30-days average used by where condition
+***
+
+
+
+
+
+
+
 
 
