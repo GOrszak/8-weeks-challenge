@@ -335,11 +335,9 @@ where ranking = 1;
 ***
 
 
-**5. Comparing the closing balance of a customer’s first month and the closing balance from their second nth, what percentage of customers:**
+**5. What is the percentage of customers who increase their closing balance by more than 5%?**
 
-For this question, I have created 2 temporary tables to solve the questions below:
-- Create temp table #1 `customer_monthly_balances` by copying and pasting the code from the solution to Question 4. 
-- Use temp table #1 `ranked_monthly_balances` to create temp table #2 by applying the `ROW_NUMBER()` function. 
+
 
 ```sql
 WITH cte as (SELECT customer_id, txn_date, txn_type, 
@@ -376,168 +374,101 @@ WHERE customer_id NOT IN (
     WHERE prc < 5.00)
 ```
 
-**- What percentage of customers have a negative first month balance? What percentage of customers have a positive first month balance?**
+Output of `cte_test` looks like this:
 
-To address both questions, I'm using one solution since the questions are asking opposite spectrums of each other.  
+![obraz](https://github.com/user-attachments/assets/ee3ef315-4fd0-4757-b9f9-0dede44c6058)
 
-````sql
--- Method 1
-SELECT 
-  ROUND(100.0 * 
-    SUM(CASE 
-      WHEN ending_balance::TEXT LIKE '-%' THEN 1 ELSE 0 END)
-    /(SELECT COUNT(DISTINCT customer_id) 
-    FROM customer_monthly_balances),1) AS negative_first_month_percentage,
-  ROUND(100.0 * 
-    SUM(CASE 
-      WHEN ending_balance::TEXT NOT LIKE '-%' THEN 1 ELSE 0 END)
-    /(SELECT COUNT(DISTINCT customer_id) 
-    FROM customer_monthly_balances),1) AS positive_first_month_percentage
-FROM ranked_monthly_balances
-WHERE ranked_row = 1;
-````
+This is basically code from exercise number 4 but there were added columns of previous month (`lag` function) and percentage which display how total balance changed at the end of the month.
 
-A cheeky solution would be to simply calculate one of the percentages requested and then deducting it from 100%.
-```sql
--- Method 2
-SELECT 
-  ROUND(100.0 * 
-    COUNT(customer_id)
-    /(SELECT COUNT(DISTINCT customer_id) 
-    FROM customer_monthly_balances),1) AS negative_first_month_percentage,
-  100 - ROUND(100.0 * COUNT(customer_id)
-    /(SELECT COUNT(DISTINCT customer_id) 
-    FROM customer_monthly_balances),1) AS positive_first_month_percentage
-FROM ranked_monthly_balances
-WHERE ranked_row = 1
-  AND ending_balance::TEXT LIKE '-%';
-```
+Latest query takes amount of client where prc was not lower than 5% and divide by total amount of clients.
 
-**Answer:**
+![obraz](https://github.com/user-attachments/assets/bf77284c-cd87-4d2f-9f97-1cc75bb6742a)
 
-|negative_first_month_percentage|positive_first_month_percentage|
-|:----|:----|
-|44.8|55.2|
 
-**- What percentage of customers increase their opening month’s positive closing balance by more than 5% in the following month?**
+***
 
-I'm using `LEAD()` window function to query the balances for the following month and then, filtering the results to select only the records with balances for the 1st and 2nd month. 
+## 🏦 C. Data Allocation Challenge
 
-Important assumptions:
-- Negative balances in the `following_balance` field have been excluded from the results. This is because a higher negative balance in the following month does not represent a true increase in balances. 
-- Including negative balances could lead to a misrepresentation of the answer as the percentage of variance would still appear as a positive percentage. 
+To test out a few different hypotheses - the Data Bank team wants to run an experiment where different groups of customers would be allocated data using 3 different options:
+
+    Option 1: data is allocated based off the amount of money at the end of the previous month
+    Option 2: data is allocated on the average amount of money kept in the account in the previous 30 days
+    Option 3: data is updated real-time
+
+For this multi-part challenge question - you have been requested to generate the following data elements to help the Data Bank team estimate how much data will need to be provisioned for each option:
+
+    running customer balance column that includes the impact each transaction
+    customer balance at the end of each month
+    minimum, average and maximum values of the running balance for each customer
+
+Using all of the data available - how much data would have been required for each option on a monthly basis?
+
+
+
+
+**- Running customer balance column that includes the impact each transaction**
 
 ````sql
-WITH following_month_cte AS (
-  SELECT
-    customer_id, 
-    ending_month, 
-    ending_balance, 
-    LEAD(ending_balance) OVER (
-      PARTITION BY customer_id 
-      ORDER BY ending_month) AS following_balance
-  FROM ranked_monthly_balances
-)
-, variance_cte AS (
-  SELECT 
-    customer_id, 
-    ending_month, 
-    ROUND(100.0 * 
-      (following_balance - ending_balance) / ending_balance,1) AS variance
-  FROM following_month_cte  
-  WHERE ending_month = '2020-01-31'
-    AND following_balance::TEXT NOT LIKE '-%'
-  GROUP BY 
-    customer_id, ending_month, ending_balance, following_balance
-  HAVING ROUND(100.0 * (following_balance - ending_balance) / ending_balance,1) > 5.0
-)
-
-SELECT 
-  ROUND(100.0 * 
-    COUNT(customer_id)
-    / (SELECT COUNT(DISTINCT customer_id) 
-    FROM ranked_monthly_balances),1) AS increase_5_percentage
-FROM variance_cte; 
+SELECT customer_id,
+       txn_date,
+       txn_type,
+       txn_amount,
+       SUM(CASE WHEN txn_type = 'deposit' THEN txn_amount
+		WHEN txn_type = 'withdrawal' THEN -txn_amount
+		WHEN txn_type = 'purchase' THEN -txn_amount
+		ELSE 0
+	   END) OVER(PARTITION BY customer_id ORDER BY txn_date) AS running_balance
+FROM customer_transactions;
 ````
+![obraz](https://github.com/user-attachments/assets/f8099645-2505-4afc-9b12-bbe8e12c0442)
 
-**Answer:**
 
-|increase_5_percentage|
-|:----|
-|20.0|
+***
 
-- Among the customers, 20% experience a growth of more than 5% in their positive closing balance from the opening month to the following month.
-
-**- What percentage of customers reduce their opening month’s positive closing balance by more than 5% in the following month?**
+**- Customer balance at the end of each month**
 
 ````sql
-WITH following_month_cte AS (
-  SELECT
-    customer_id, 
-    ending_month, 
-    ending_balance, 
-    LEAD(ending_balance) OVER (
-      PARTITION BY customer_id 
-      ORDER BY ending_month) AS following_balance
-  FROM ranked_monthly_balances
-)
-, variance_cte AS (
-  SELECT 
-    customer_id, 
-    ending_month, 
-    ROUND((100.0 * 
-      following_balance - ending_balance) / ending_balance,1) AS variance
-  FROM following_month_cte  
-  WHERE ending_month = '2020-01-31'
-    AND following_balance::TEXT NOT LIKE '-%'
-  GROUP BY 
-    customer_id, ending_month, ending_balance, following_balance
-  HAVING ROUND((100.0 * (following_balance - ending_balance)) / ending_balance,2) < 5.0
-)
-
-SELECT 
-  ROUND(100.0 * 
-    COUNT(customer_id)
-    / (SELECT COUNT(DISTINCT customer_id) 
-    FROM ranked_monthly_balances),1) AS reduce_5_percentage
-FROM variance_cte; 
+SELECT customer_id,
+       txn_date,
+       txn_type,
+       txn_amount,
+       SUM(CASE WHEN txn_type = 'deposit' THEN txn_amount
+		WHEN txn_type = 'withdrawal' THEN -txn_amount
+		WHEN txn_type = 'purchase' THEN -txn_amount
+		ELSE 0
+	   END) OVER(PARTITION BY customer_id ORDER BY txn_date) AS running_balance
+FROM customer_transactions;
 ````
+![obraz](https://github.com/user-attachments/assets/3417419b-02d1-4022-b23a-cf0f3b556f80)
 
-**Answer:**
 
-|reduce_5_percentage|
-|:----|
-|25.6|
 
-- Among the customers, 25.6% experience a drop of more than 5% in their positive closing balance from the opening month to the following month.
 
-**- What percentage of customers move from a positive balance in the first month to a negative balance in the second month?**
+***
+
+**- Minimum, average and maximum values of the running balance for each customer**
 
 ````sql
-WITH following_month_cte AS (
-  SELECT
-    customer_id, 
-    ending_month, 
-    ending_balance, 
-    LEAD(ending_balance) OVER (
-      PARTITION BY customer_id 
-      ORDER BY ending_month) AS following_balance
-  FROM ranked_monthly_balances
-)
-, variance_cte AS (
-  SELECT *
-  FROM following_month_cte
-  WHERE ending_month = '2020-01-31'
-    AND ending_balance::TEXT NOT LIKE '-%'
-    AND following_balance::TEXT LIKE '-%'
-)
-
-SELECT 
-  ROUND(100.0 * 
-    COUNT(customer_id) 
-    / (SELECT COUNT(DISTINCT customer_id) 
-    FROM ranked_monthly_balances),1) AS positive_to_negative_percentage
-FROM variance_cte;
+SELECT  DISTINCT customer_id,
+		max(running_balance) over (partition by customer_id) as maximal_values,
+		ROUND(avg(running_balance) over (partition by customer_id),2) as average_value,
+		min(running_balance) over (partition by customer_id) as minimal_value
+	FROM (
+SELECT customer_id,
+       txn_date,
+       txn_type,
+       txn_amount,
+       SUM(CASE WHEN txn_type = 'deposit' THEN txn_amount
+		WHEN txn_type = 'withdrawal' THEN -txn_amount
+		WHEN txn_type = 'purchase' THEN -txn_amount
+		ELSE 0
+	   END) OVER(PARTITION BY customer_id ORDER BY txn_date) AS running_balance
+FROM customer_transactions)
+ORDER BY customer_id;
 ````
+![obraz](https://github.com/user-attachments/assets/ca073423-db0b-44d6-b9c7-14d63a2a1303)
+
+
+***
 
 
