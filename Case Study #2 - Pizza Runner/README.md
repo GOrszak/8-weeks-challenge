@@ -490,26 +490,14 @@ GROUP BY pizza_name, pn.pizza_id;
 
 ```sql
 
-WITH tcol1 AS ( SELECT  split_part(extras, ',',1) AS col1
-FROM pizza_runner.customer_orders_temp
-			  WHERE extras IS NOT NULL),
-tcol2 AS (SELECT split_part(extras, ',',2) AS col2
-FROM pizza_runner.customer_orders_temp
-		 WHERE extras IS NOT NULL),
-merged AS (
-SELECT * FROM tcol1
-UNION ALL
-SELECT * FROM tcol2)
-		
-		
+SELECT p.topping_name,
+		extras
+FROM pizza_toppings as p
+CROSS JOIN LATERAL(
+SELECT COUNT(extras) as extras FROM customer_orders as co
+	WHERE co.extras::INT = p.topping_id)
+ORDER BY extras DESC;
 
-SELECT col1 AS id,  COUNT(*) AS total, tn.topping_name
-FROM merged
-INNER JOIN pizza_runner.pizza_toppings  tn 
-ON merged.col1 = CAST(tn.topping_id AS TEXT)
-GROUP BY col1, tn.topping_name
-ORDER BY total DESC
-LIMIT 1;	
 
 
 ```
@@ -525,26 +513,15 @@ LIMIT 1;
 
 ```sql
 
-WITH tcol1 AS ( SELECT  split_part(exclusions, ',',1) AS col1
-FROM pizza_runner.customer_orders_temp
-			  WHERE exclusions IS NOT NULL),
-tcol2 AS (SELECT split_part(exclusions, ',',2) AS col2
-FROM pizza_runner.customer_orders_temp
-		 WHERE exclusions IS NOT NULL),
-merged AS (
-SELECT * FROM tcol1
-UNION ALL
-SELECT * FROM tcol2)
-	
--- SELECT * FROM  pizza_runner.customer_orders_temp;
+SELECT p.topping_name,
+		excluded
+FROM pizza_toppings as p
+CROSS JOIN LATERAL(
+SELECT COUNT(exclusions) as excluded FROM customer_orders as co
+	WHERE co.exclusions::INT = p.topping_id)
+ORDER BY excluded DESC;
 
-SELECT col1 AS id,  COUNT(*) AS total, tn.topping_name
-FROM merged
-INNER JOIN pizza_runner.pizza_toppings  tn 
-ON merged.col1 = CAST(tn.topping_id AS TEXT)
-GROUP BY col1, tn.topping_name
-ORDER BY total DESC
-LIMIT 1;	
+
 
 
 ```
