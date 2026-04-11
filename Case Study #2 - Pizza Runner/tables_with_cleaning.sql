@@ -123,28 +123,66 @@ VALUES
   
   
   
-DROP TABLE IF EXISTS customer_orders_temp;
+/*
 
-CREATE TABLE customer_orders_temp AS
-SELECT order_id,
-       customer_id,
-       pizza_id,
-       CASE
-           WHEN exclusions = '' THEN NULL
-           WHEN exclusions = 'null' THEN NULL
-           ELSE exclusions
-       END AS exclusions,
-       CASE
-           WHEN extras = '' THEN NULL
-           WHEN extras = 'null' THEN NULL
-           ELSE extras
-       END AS extras,
-       order_time
-FROM pizza_runner.customer_orders;
+Customer orders cleanup
 
-SELECT * FROM customer_orders_temp;
+*/
 
 
+DROP TABLE IF EXISTS customer_orders_clean;
+CREATE TABLE customer_orders_clean AS
+SELECT 
+    co.order_id,
+    co.customer_id,
+    co.pizza_id,
+     -- split + clean exclusions
+    CASE
+        WHEN co.exclusions IS NULL THEN NULL
+        WHEN TRIM(split_part(co.exclusions, ',', n.n)) IN ('', 'null')
+            THEN NULL
+        ELSE TRIM(split_part(co.exclusions, ',', n.n))
+    END AS exclusions,
+
+    -- split + clean extras
+    CASE
+        WHEN co.extras IS NULL THEN NULL
+        WHEN TRIM(split_part(co.extras, ',', n.n)) IN ('', 'null')
+            THEN NULL
+        ELSE TRIM(split_part(co.extras, ',', n.n))
+    END AS extras,
+	co.order_time::TIMESTAMP
+
+FROM customer_orders co
+
+LEFT JOIN generate_series(1, 10) n
+ON (
+    (co.exclusions IS NOT NULL AND 
+     CHAR_LENGTH(co.exclusions) - CHAR_LENGTH(REPLACE(co.exclusions, ',', '')) >= n.n - 1)
+    OR
+    (co.extras IS NOT NULL AND 
+     CHAR_LENGTH(co.extras) - CHAR_LENGTH(REPLACE(co.extras, ',', '')) >= n.n - 1)
+)
+
+ORDER BY co.order_id, n.n;
+
+
+TRUNCATE TABLE customer_orders;
+
+INSERT INTO customer_orders
+SELECT * FROM customer_orders_clean;
+
+DROP TABLE customer_orders_clean;
+
+SELECT * FROM customer_orders;
+
+
+
+/*
+
+Runner order cleanup
+
+*/
 
 DROP TABLE IF EXISTS runner_orders_temp;
 CREATE TABLE runner_orders_temp AS
@@ -170,13 +208,23 @@ SELECT order_id,
        END AS cancellation
 FROM pizza_runner.runner_orders;
 
+TRUNCATE TABLE runner_orders;
+
+INSERT INTO pizza_runner.runner_orders
 SELECT * FROM runner_orders_temp;
 
+DROP TABLE runner_orders_temp;
+
+SELECT * FROM runner_orders;
+
+/*
+
+Pizza recipes cleanup
+
+*/
 
 
-
-
-
+DROP TABLE IF EXISTS pizza_recipes_clean;
 
 CREATE TABLE pizza_recipes_clean as (
 SELECT p.pizza_id,
@@ -195,77 +243,17 @@ ON CHAR_LENGTH(p.toppings) - CHAR_LENGTH(REPLACE(p.toppings,
           ',', '')) >= numbers.n-1
 ORDER BY p.pizza_id, n);
 
-SELECT *
-FROM pizza_recipes_clean;
+SELECT * FROM pizza_recipes_clean;
 
 
+TRUNCATE TABLE pizza_runner.pizza_recipes;
 
+INSERT INTO pizza_runner.pizza_recipes
+SELECT * FROM pizza_recipes_clean;
 
+DROP TABLE pizza_recipes_clean;
 
+SELECT * FROM pizza_recipes;
 
-
-SELECT *,
-       json_array(pizza_runner.toppings),
-       replace(json_array(pizza_runner.toppings), ',', '","'),
-       trim(replace(json_array(pizza_runner.toppings), ',', '","'))
-FROM pizza_runner.pizza_recipes;
-
-
-
-
-
-CREATE TABLE customer_orders_pre_clean as 
-select order_id,
-    customer_id,
-       pizza_id,
-       order_time,
-       extras,
-       split_part(split_part(exclusions, ',', numbers.n), 
-          ',', -1) AS exclusions
-FROM (SELECT 1 AS n UNION ALL
-   SELECT 2 UNION ALL
-      SELECT 3) numbers
-right JOIN pizza_runner.customer_orders
-ON CHAR_LENGTH(exclusions) - CHAR_LENGTH(replace(exclusions, 
-      ',', '')) >= numbers.n-1
-order by order_id, n; 
-
-SELECT * FROM customer_orders_pre_clean;
-
-
-
--- to handle the commas in the extras column
-CREATE TEMPORARY TABLE customer_orders_cleaned AS
-select order_id,
-    customer_id,
-       pizza_id,
-       order_time,
-       exclusions,
-       split_part(split_part(extras, ',', numbers.n), 
-          ',', -1) AS extras
-FROM (SELECT 1 AS n UNION ALL
-   SELECT 2 UNION ALL
-      SELECT 3) numbers
-RIGHT JOIN customer_orders_pre_clean
-ON CHAR_LENGTH(extras) - CHAR_LENGTH(REPLACE(extras, ',', '')) 
-      >= numbers.n-1
-order by order_id, n;
-
-
-SELECT * FROM customer_orders_cleaned;
-
-
-UPDATE customer_orders_cleaned
-SET exclusions = CASE WHEN exclusions = '' THEN NULL 
-                 WHEN exclusions = 'null' THEN NULL 
-                 ELSE exclusions END;
-				 
-				 
-UPDATE customer_orders_cleaned
-SET extras = CASE WHEN extras = '' THEN NULL 
-             WHEN extras = 'null' THEN NULL 
-             ELSE extras END;
-			 
-SELECT * FROM customer_orders_cleaned;	 
 
 
